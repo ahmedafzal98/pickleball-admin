@@ -12,7 +12,10 @@ app.use(morgan("dev"));
 app.use(bodyParser.json());
 app.use(
   cors({
-    origin: "https://pickleball-admin-client.onrender.com", // frontend URL
+    origin: [
+      "https://pickleball-admin-client.onrender.com",
+      "http://localhost:5173",
+    ], // frontend URL
   })
 );
 

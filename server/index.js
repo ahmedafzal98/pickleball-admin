@@ -10,7 +10,11 @@ const categoriesRouter = require("./routes/categories");
 const app = express();
 app.use(morgan("dev"));
 app.use(bodyParser.json());
-app.use(cors());
+app.use(
+  cors({
+    origin: "https://pickleball-admin-client.onrender.com", // frontend URL
+  })
+);
 
 app.use("/api/categories", categoriesRouter);
 

@@ -46,7 +46,7 @@ const CategoriesPage = () => {
 
   return (
     <div className="container mx-auto p-4 space-y-6">
-      <CategoryUpload onSuccess={loadCategories} />
+      {/* <CategoryUpload onSuccess={loadCategories} /> */}
       <CategoryForm
         category={editing}
         onSave={handleSave}

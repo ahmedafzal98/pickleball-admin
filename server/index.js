@@ -15,6 +15,7 @@ app.use(
     origin: [
       "https://pickleball-admin-client.onrender.com",
       "http://localhost:5173",
+      "http://localhost:5174",
     ], // frontend URL
   })
 );

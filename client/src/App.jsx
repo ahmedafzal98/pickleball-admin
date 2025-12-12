@@ -1,18 +1,15 @@
 import React from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
+import CategoriesPage from "./pages/CategoriesPage";
 
-const App = () => {
+function App() {
   return (
-    <Router>
-      <div className="min-h-screen bg-gray-100">
-        <Routes>
-          {/* Only one route for now — can be expanded later */}
-          <Route path="/" element={<Home />} />
-        </Routes>
-      </div>
-    </Router>
+    <div className="min-h-screen bg-gray-100">
+      <header className="bg-blue-600 text-white p-4 text-2xl font-bold">
+        Category Management
+      </header>
+      <CategoriesPage />
+    </div>
   );
-};
+}
 
 export default App;

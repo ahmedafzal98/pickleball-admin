@@ -1,276 +1,165 @@
-const Category = require("../models/Category.js");
-const {
-  uploadToCloudinary,
-  deleteFromCloudinary,
-} = require("../helpers/cloudinaryUpload.js");
-
-/**
- * @desc Create a new category (with optional subcategories)
- * @route POST /api/categories
- */
-const createCategory = async (req, res) => {
+const Category = require("../models/Category");
+const cloudinary = require("../config/cloudinary");
+const uploadSubcategoryImages = require("../utils/uploadSubcategoryImages");
+// Create a top-level category
+exports.createCategory = async (req, res) => {
   try {
-    const { name } = req.body;
+    // 1️⃣ Parse fields safely
+    const { name, subcategories = "[]" } = req.body;
 
-    if (!name)
-      return res.status(400).json({ message: "Category name is required" });
-
-    // Upload main category image
-    if (!req.files || !req.files.categoryImage)
-      return res.status(400).json({ message: "Category image is required" });
-
-    const categoryImage = req.files.categoryImage[0];
-    const categoryUpload = await uploadToCloudinary(
-      categoryImage.buffer,
-      "categories"
-    );
-
-    let subcategories = [];
-
-    console.log(req.body.subcategories);
-    console.log(req.files.subcategoryImages);
-
-    if (req.files.subcategoryImages && req.body.subcategories) {
-      const subcategoryData = JSON.parse(req.body.subcategories); // array of {name}
-      const subcategoryImages = req.files.subcategoryImages;
-
-      if (subcategoryData.length !== subcategoryImages.length) {
-        return res
-          .status(400)
-          .json({ message: "Mismatch between subcategory names and images" });
-      }
-
-      const uploadedSubcategories = await Promise.all(
-        subcategoryImages.map((file, i) =>
-          uploadToCloudinary(file.buffer, "subcategories").then((upload) => ({
-            name: subcategoryData[i].name,
-            image_url: upload.url,
-            image_public_id: upload.public_id,
-          }))
-        )
-      );
-
-      subcategories = uploadedSubcategories;
+    let subcats = [];
+    try {
+      subcats = JSON.parse(subcategories || "[]"); // default empty array
+    } catch (parseErr) {
+      return res.status(400).json({ error: "Invalid JSON for subcategories" });
     }
 
-    const newCategory = await Category.create({
-      name,
-      image_url: categoryUpload.url,
-      image_public_id: categoryUpload.public_id,
-      subcategories,
-    });
+    // 2️⃣ Upload top-level category image
+    let image_url = "";
+    if (req.files && req.files.image && req.files.image[0]) {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "coverflow_categories" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.files.image[0].buffer);
+      });
+      image_url = result.secure_url;
+    }
 
-    res.status(201).json({
-      message: "Category created successfully",
-      category: newCategory,
-    });
-  } catch (error) {
-    console.error(error);
-    res
-      .status(500)
-      .json({ message: "Error creating category", error: error.message });
+    // 3️⃣ Upload subcategory images recursively
+    if (
+      req.files &&
+      req.files.subcat_images &&
+      req.files.subcat_images.length > 0
+    ) {
+      subcats = await uploadSubcategoryImages(subcats, req.files.subcat_images);
+    }
+
+    // 4️⃣ Save to database
+    const cat = new Category({ name, image_url, subcategories: subcats });
+    await cat.save();
+
+    res.status(201).json(cat);
+  } catch (err) {
+    console.error("Create Category Error:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-/**
- * @desc Get all categories
- * @route GET /api/categories
- */
-const getAllCategories = async (req, res) => {
+// Get all categories (full tree)
+exports.getAllCategories = async (req, res) => {
   try {
-    const categories = await Category.find();
-    res.status(200).json(categories);
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error fetching categories", error: error.message });
+    const categories = await Category.find().lean();
+    res.json(categories);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-/**
- * @desc Update a category by ID
- * @route PUT /api/categories/:id
- */
-const updateCategory = async (req, res) => {
+// Get single category by ID
+exports.getCategoryById = async (req, res) => {
+  try {
+    const cat = await Category.findById(req.params.id).lean();
+    if (!cat) return res.status(404).json({ error: "Not found" });
+    res.json(cat);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Update a category doc entirely (overwrite fields)
+exports.updateCategory = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
     const category = await Category.findById(id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
+    if (!category) return res.status(404).json({ error: "Category not found" });
 
-    // Update name if provided
+    const { name, subcategories = "[]" } = req.body;
     if (name) category.name = name;
 
-    // Update category image if new file provided
-    if (req.files?.categoryImage) {
-      await deleteFromCloudinary(category.image_public_id);
-      const upload = await uploadToCloudinary(
-        req.files.categoryImage[0].buffer,
-        "categories"
-      );
-      category.image_url = upload.url;
-      category.image_public_id = upload.public_id;
+    let subcats = JSON.parse(subcategories);
+
+    // Upload top-level image if provided
+    if (req.files && req.files.image && req.files.image[0]) {
+      const result = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "coverflow_categories" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.files.image[0].buffer);
+      });
+      category.image_url = result.secure_url;
     }
 
-    await category.save();
-    res
-      .status(200)
-      .json({ message: "Category updated successfully", category });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error updating category", error: error.message });
-  }
-};
-
-/**
- * @desc Delete category
- * @route DELETE /api/categories/:id
- */
-const deleteCategory = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const category = await Category.findById(id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
-    // Delete main image
-    await deleteFromCloudinary(category.image_public_id);
-
-    // Delete all subcategory images
-    for (const sub of category.subcategories) {
-      await deleteFromCloudinary(sub.image_public_id);
+    // Upload subcategory images recursively
+    if (req.files && req.files.subcat_images) {
+      subcats = await uploadSubcategoryImages(subcats, req.files.subcat_images);
     }
 
-    await Category.findByIdAndDelete(id);
-    res.status(200).json({ message: "Category deleted successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error deleting category", error: error.message });
-  }
-};
-
-/* ---------------------- NEW SUBCATEGORY CONTROLLERS ---------------------- */
-
-/**
- * @desc Add a new subcategory to an existing category
- * @route POST /api/categories/:id/subcategories
- */
-const addSubcategory = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name } = req.body;
-    if (!name)
-      return res.status(400).json({ message: "Subcategory name is required" });
-
-    const category = await Category.findById(id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
-    if (!req.file)
-      return res.status(400).json({ message: "Subcategory image is required" });
-
-    const upload = await uploadToCloudinary(req.file.buffer, "subcategories");
-
-    const newSub = {
-      name,
-      image_url: upload.url,
-      image_public_id: upload.public_id,
-    };
-
-    category.subcategories.push(newSub);
+    category.subcategories = subcats;
     await category.save();
 
-    res
-      .status(201)
-      .json({ message: "Subcategory added successfully", subcategory: newSub });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error adding subcategory", error: error.message });
+    res.status(200).json(category);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-/**
- * @desc Update a subcategory by ID
- * @route PUT /api/categories/:id/subcategories/:subId
- */
-const updateSubcategory = async (req, res) => {
+// Delete a category (top-level doc)
+exports.deleteCategory = async (req, res) => {
   try {
-    const { id, subId } = req.params;
-    const { name } = req.body;
-
-    console.log("updated Name", name);
-
-    const category = await Category.findById(id);
-
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
-
-    const subcategory = category.subcategories.id(subId);
-    console.log("old subcategory", subcategory);
-
-    if (!subcategory)
-      return res.status(404).json({ message: "Subcategory not found" });
-
-    if (name) subcategory.name = name;
-
-    if (req.file) {
-      await deleteFromCloudinary(subcategory.image_public_id);
-      const upload = await uploadToCloudinary(req.file.buffer, "subcategories");
-      subcategory.image_url = upload.url;
-      subcategory.image_public_id = upload.public_id;
-    }
-
-    await category.save();
-    res
-      .status(200)
-      .json({ message: "Subcategory updated successfully", subcategory });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error updating subcategory", error: error.message });
+    const removed = await Category.findByIdAndDelete(req.params.id);
+    if (!removed) return res.status(404).json({ error: "Not found" });
+    res.json({ message: "Deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-/**
- * @desc Delete a subcategory by ID
- * @route DELETE /api/categories/:id/subcategories/:subId
- */
-const deleteSubcategory = async (req, res) => {
+// Upload image to Cloudinary and return URL
+// req.file from multer upload.single("image")
+exports.uploadImage = async (req, res) => {
   try {
-    const { id, subId } = req.params;
-    const category = await Category.findById(id);
-    if (!category)
-      return res.status(404).json({ message: "Category not found" });
+    if (!req.file) return res.status(400).json({ error: "No file provided" });
 
-    const subcategory = category.subcategories.id(subId);
-    if (!subcategory)
-      return res.status(404).json({ message: "Subcategory not found" });
+    // upload buffer to cloudinary
+    const result = (await cloudinary.uploader.upload_stream_promise)
+      ? cloudinary.uploader.upload_stream_promise(
+          { resource_type: "image" },
+          req.file.buffer
+        )
+      : uploadFromBuffer(req.file.buffer);
 
-    await deleteFromCloudinary(subcategory.image_public_id);
+    // Note: many cloudinary libs don't have upload_stream_promise built-in; use helper below if needed
+    res.json({ url: result.secure_url, public_id: result.public_id });
+  } catch (err) {
+    console.error("Cloudinary upload error:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
 
-    category.subcategories = category.subcategories.filter(
-      (sub) => sub._id.toString() !== subId
+// Helper: upload from buffer using upload_stream
+// (use if your cloudinary version doesn't provide promise API)
+async function uploadFromBuffer(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: "coverflow_categories" },
+      (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      }
     );
-
-    await category.save();
-    res.status(200).json({ message: "Subcategory deleted successfully" });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error deleting subcategory", error: error.message });
-  }
-};
-
-module.exports = {
-  createCategory,
-  getAllCategories,
-  updateCategory,
-  deleteCategory,
-  addSubcategory,
-  updateSubcategory,
-  deleteSubcategory,
-};
+    stream.end(buffer);
+  });
+}

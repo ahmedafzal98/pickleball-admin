@@ -28,13 +28,19 @@ const CategoriesPage = () => {
   }, []);
 
   const handleSave = async (cat) => {
-    if (editing) {
-      await updateCategory(editing.id, cat);
-      setEditing(null);
-    } else {
-      await createCategory(cat);
+    try {
+      if (editing) {
+        await updateCategory(editing.id, cat);
+        setEditing(null);
+      } else {
+        await createCategory(cat);
+        alert("Category Added");
+      }
+      await loadCategories();
+    } catch (err) {
+      console.error(err);
+      alert(err.response?.data?.message || "Failed to save category");
     }
-    loadCategories();
   };
 
   const handleDelete = async (id) => {

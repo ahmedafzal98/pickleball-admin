@@ -133,17 +133,28 @@ router.post("/", async (req, res) => {
 
     if (parent !== null) {
       const parentDoc = await Category.findOne({ id: parent });
-      if (!parentDoc)
+      if (!parentDoc) {
         return res.status(400).json({ message: "Parent category not found." });
+      }
     }
 
-    const cat = new Category({ name, parent });
+    // 🔥 Auto-generate numeric ID
+    const lastCategory = await Category.findOne().sort({ id: -1 });
+    const newId = lastCategory ? lastCategory.id + 1 : 1;
+
+    const cat = new Category({
+      id: newId,
+      name,
+      parent,
+    });
+
     await cat.save();
-    return res.status(201).json(cat);
+    res.status(201).json(cat);
   } catch (err) {
-    if (err.code === 11000)
+    if (err.code === 11000) {
       return res.status(400).json({ message: "Name must be unique." });
-    return res.status(500).json({ message: err.message });
+    }
+    res.status(500).json({ message: err.message });
   }
 });
 

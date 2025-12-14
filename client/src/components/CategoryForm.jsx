@@ -11,7 +11,17 @@ const CategoryForm = ({ category = {}, onSave, categories }) => {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave({ name, parent: parent === "" ? null : Number(parent) });
+    try {
+      const payload = {
+        name: name.trim(),
+        parent: parent ? Number(parent) : null,
+      };
+
+      onSave(payload);
+      setName("");
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   return (

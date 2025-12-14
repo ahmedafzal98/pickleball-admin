@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const BASE_URL = "https://pickleball-admin.onrender.com/api/categories";
+const BASE_URL = "http://localhost:5000/api/categories";
 
 export const fetchCategories = async () => {
   const res = await axios.get(`${BASE_URL}/dropdown/all`);

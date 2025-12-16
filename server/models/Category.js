@@ -4,7 +4,6 @@ const CategorySchema = new mongoose.Schema(
     id: {
       type: Number,
       required: true,
-      unique: true,
       index: true,
     },
 

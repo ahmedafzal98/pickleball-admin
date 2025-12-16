@@ -297,11 +297,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     }
 
     // Remove duplicates & empty names
-    const uniqueNames = new Set();
-    const data = rawData.filter(
-      (row) =>
-        row.name && !uniqueNames.has(row.name) && uniqueNames.add(row.name)
-    );
+    const data = rawData.filter((row) => row.name);
 
     // ---------------- Delete existing categories ----------------
     await Category.deleteMany({});

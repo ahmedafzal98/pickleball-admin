@@ -152,7 +152,7 @@ router.post("/", async (req, res) => {
     res.status(201).json(cat);
   } catch (err) {
     if (err.code === 11000) {
-      return res.status(400).json({ message: "Name must be unique." });
+      return res.status(400).json({ message: "ID must be unique." });
     }
     res.status(500).json({ message: err.message });
   }
@@ -199,7 +199,7 @@ router.put("/:id", async (req, res) => {
     return res.json(cat);
   } catch (err) {
     if (err.code === 11000)
-      return res.status(400).json({ message: "Name must be unique." });
+      return res.status(400).json({ message: "ID must be unique." });
     return res.status(500).json({ message: err.message });
   }
 });
